@@ -56,6 +56,9 @@ struct curve448_key {
 #ifdef WOLFSSL_ASYNC_CRYPT
     WC_ASYNC_DEV asyncDev;
 #endif
+#if defined(WOLF_CRYPTO_CB)
+    int devId;
+#endif
 
     /* bit fields */
     byte pubSet:1;
@@ -86,6 +89,8 @@ int wc_curve448_shared_secret_ex(curve448_key* private_key,
 
 WOLFSSL_API
 int wc_curve448_init(curve448_key* key);
+WOLFSSL_API
+int wc_curve448_init_ex(curve448_key* key, void* heap, int devId);
 
 WOLFSSL_API
 void wc_curve448_free(curve448_key* key);

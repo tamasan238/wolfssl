@@ -42,6 +42,10 @@
     #include <wolfcrypt/src/misc.c>
 #endif
 
+#ifdef WOLF_CRYPTO_CB
+    #include <wolfssl/wolfcrypt/cryptocb.h>
+#endif
+
 int wc_curve448_make_pub(int public_size, byte* pub, int private_size,
     const byte* priv)
 {
@@ -666,14 +670,13 @@ int wc_curve448_import_private_ex(const byte* priv, word32 privSz,
 
 #endif /* HAVE_CURVE448_KEY_IMPORT */
 
-
 /* Initialize the curve448 key.
  *
  * key  [in]  Curve448 key object.
  * returns BAD_FUNC_ARG when key is NULL,
  *         0 otherwise.
  */
-int wc_curve448_init(curve448_key* key)
+int wc_curve448_init_ex(curve448_key* key, void* heap, int devId)
 {
     int ret = 0;
 
@@ -684,6 +687,16 @@ int wc_curve448_init(curve448_key* key)
     if (ret == 0) {
         XMEMSET(key, 0, sizeof(*key));
 
+        /* currently the format for curve448 */
+        // key->dp = &curve448_sets[0];
+
+    #ifdef WOLF_CRYPTO_CB
+        key->devId = devId;
+    #else
+        (void)devId;
+    #endif
+        (void)heap; /* if needed for XMALLOC/XFREE in future */
+
         fe448_init();
 
     #ifdef WOLFSSL_CHECK_MEM_ZERO
@@ -692,6 +705,18 @@ int wc_curve448_init(curve448_key* key)
     }
 
     return ret;
+}
+
+
+/* Initialize the curve448 key.
+ *
+ * key  [in]  Curve448 key object.
+ * returns BAD_FUNC_ARG when key is NULL,
+ *         0 otherwise.
+ */
+int wc_curve448_init(curve448_key* key)
+{
+    return wc_curve448_init_ex(key, NULL, INVALID_DEVID);
 }
 
 

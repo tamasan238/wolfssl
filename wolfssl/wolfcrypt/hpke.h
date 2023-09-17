@@ -65,7 +65,7 @@ enum {
 };
 
 /* TODO better way of doing this */
-#define HPKE_SUPPORTED_KEM_LEN 4
+#define HPKE_SUPPORTED_KEM_LEN 5
 #define HPKE_SUPPORTED_KDF_LEN 3
 #define HPKE_SUPPORTED_AEAD_LEN 2
 extern const int hpkeSupportedKem[HPKE_SUPPORTED_KEM_LEN];

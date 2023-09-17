@@ -1,6 +1,6 @@
 /* hpke.c
  *
- * Copyright (C) 2006-2022 wolfSSL Inc.
+ * Copyright (C) 2006-2023 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -20,7 +20,7 @@
  */
 
 /* The HPKE supports ECC and X25519 with AES GCM only.
- * TODO: Add X448 and ChaCha20
+ * TODO: Add ChaCha20
  */
 
 #ifdef HAVE_CONFIG_H
@@ -29,8 +29,8 @@
 
 #include <wolfssl/wolfcrypt/settings.h>
 
-#if defined(HAVE_HPKE) && (defined(HAVE_ECC) || defined(HAVE_CURVE25519)) && \
-    defined(HAVE_AESGCM)
+#if defined(HAVE_HPKE) && (defined(HAVE_ECC) || defined(HAVE_CURVE25519) \
+    || defined(HAVE_CURVE448)) && defined(HAVE_AESGCM)
 
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #include <wolfssl/wolfcrypt/ecc.h>
@@ -55,6 +55,7 @@ const int hpkeSupportedKem[HPKE_SUPPORTED_KEM_LEN] = {
     DHKEM_P384_HKDF_SHA384,
     DHKEM_P521_HKDF_SHA512,
     DHKEM_X25519_HKDF_SHA256,
+    DHKEM_X448_HKDF_SHA512,
 };
 
 const int hpkeSupportedKdf[HPKE_SUPPORTED_KDF_LEN] = {
@@ -218,10 +219,8 @@ int wc_HpkeInit(Hpke* hpke, int kem, int kdf, int aead, void* heap)
         case DHKEM_X448_HKDF_SHA512:
             hpke->Nsecret = WC_SHA512_DIGEST_SIZE;
             hpke->Nh = WC_SHA512_DIGEST_SIZE;
-            /* size of x448 shared secret */
-            hpke->Ndh = 64;
+            hpke->Ndh = CURVE448_KEY_SIZE;
             hpke->Npk = CURVE448_PUB_KEY_SIZE;
-            ret = BAD_FUNC_ARG; /* TODO: Add X448 */
             break;
 #endif
 
@@ -321,8 +320,19 @@ int wc_HpkeGenerateKeyPair(Hpke* hpke, void** keypair, WC_RNG* rng)
             }
             break;
 #endif
+#if defined(HAVE_CURVE448)
         case DHKEM_X448_HKDF_SHA512:
-            /* TODO: Add X448 */
+            *keypair = XMALLOC(sizeof(curve448_key), hpke->heap,
+                DYNAMIC_TYPE_CURVE448);
+            if (*keypair != NULL) {
+                ret = wc_curve448_init_ex((curve448_key*)*keypair,
+                    hpke->heap, INVALID_DEVID);
+                if (ret == 0)
+                    ret = wc_curve448_make_key(rng, 56,
+                        (curve448_key*)*keypair);
+            }
+            break;
+#endif
         default:
             ret = BAD_FUNC_ARG;
             break;
@@ -367,7 +377,11 @@ int wc_HpkeSerializePublicKey(Hpke* hpke, void* key, byte* out, word16* outSz)
                 &tmpOutSz, EC25519_LITTLE_ENDIAN);
             break;
 #endif
+#if defined(HAVE_CURVE448)
         case DHKEM_X448_HKDF_SHA512:
+            ret = wc_curve448_export_public_ex((curve448_key*)key, out,
+                &tmpOutSz, EC448_LITTLE_ENDIAN);
+#endif
         default:
             ret = -1;
             break;
@@ -420,7 +434,19 @@ int wc_HpkeDeserializePublicKey(Hpke* hpke, void** key, const byte* in,
             }
             break;
 #endif
+#if defined(HAVE_CURVE448)
         case DHKEM_X448_HKDF_SHA512:
+            *key = XMALLOC(sizeof(curve448_key), hpke->heap,
+                DYNAMIC_TYPE_CURVE448);
+            if (*key != NULL) {
+                ret = wc_curve448_init_ex((curve448_key*)*key, hpke->heap,
+                    INVALID_DEVID);
+                if (ret == 0)
+                    ret = wc_curve448_import_public_ex(in, inSz,
+                        (curve448_key*)*key, EC448_LITTLE_ENDIAN);
+            }
+            break;
+#endif
         default:
             ret = -1;
             break;
@@ -455,8 +481,12 @@ void wc_HpkeFreeKey(Hpke* hpke, word16 kem, void* keypair, void* heap)
             XFREE(keypair, heap, DYNAMIC_TYPE_CURVE25519);
             break;
 #endif
+#if defined(HAVE_CURVE448)
         case DHKEM_X448_HKDF_SHA512:
-            /* TODO: Add X448 */
+            wc_curve448_free((curve448_key*)keypair);
+            XFREE(keypair, heap, DYNAMIC_TYPE_CURVE448);
+            break;
+#endif
         default:
             break;
     }
@@ -806,8 +836,13 @@ static int wc_HpkeEncap(Hpke* hpke, void* ephemeralKey, void* receiverKey,
                 EC25519_LITTLE_ENDIAN);
             break;
 #endif
+#if defined(HAVE_CURVE448)
         case DHKEM_X448_HKDF_SHA512:
-            /* TODO: Add X448 */
+            ret = wc_curve448_shared_secret_ex((curve448_key*)ephemeralKey,
+                (curve448_key*)receiverKey, dh, &dh_len,
+                EC448_LITTLE_ENDIAN);
+            break;
+#endif
         default:
             ret = -1;
             break;
@@ -1040,8 +1075,13 @@ static int wc_HpkeDecap(Hpke* hpke, void* receiverKey, const byte* pubKey,
                     dh, &dh_len, EC25519_LITTLE_ENDIAN);
                 break;
 #endif
+#if defined(HAVE_CURVE448)
             case DHKEM_X448_HKDF_SHA512:
-                /* TODO: Add X448 */
+                ret = wc_curve448_shared_secret_ex(
+                    (curve448_key*)receiverKey, (curve448_key*)ephemeralKey,
+                    dh, &dh_len, EC448_LITTLE_ENDIAN);
+                break;
+#endif
             default:
                 ret = -1;
                 break;
@@ -1204,4 +1244,5 @@ int wc_HpkeOpenBase(Hpke* hpke, void* receiverKey, const byte* pubKey,
     return ret;
 }
 
-#endif /* HAVE_HPKE && (HAVE_ECC || HAVE_CURVE25519) && HAVE_AESGCM */
+#endif /* HAVE_HPKE && (HAVE_ECC || HAVE_CURVE25519 || HAVE_CURVE448) 
+            && HAVE_AESGCM */
